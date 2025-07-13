@@ -1,1 +1,25 @@
+# Flask & Extensions
+Flask==2.3.3
+Flask-Cors==4.0.0
+Flask-Limiter==3.5.0
+Werkzeug==2.3.7
 
+# MongoDB
+pymongo==4.5.0
+bson==0.5.10
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# API & HTTP
+requests==2.31.0
+
+# Caching (Optional but useful)
+cachetools==5.3.1
+
+# Image Handling (for Roboflow or uploads)
+Pillow==10.2.0
+opencv-python==4.9.0.80
+
+# Deployment (Optional)
+gunicorn==21.2.0
