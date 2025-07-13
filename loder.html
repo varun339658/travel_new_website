@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>India Travel + Music Guide</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f9f9f9;
+      padding: 30px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #1DB954;
+      margin-bottom: 10px;
+    }
+
+    .dropdown {
+      max-width: 400px;
+      margin: 0 auto 30px auto;
+      display: flex;
+      justify-content: center;
+    }
+
+    select {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      width: 100%;
+    }
+
+    .info-box {
+      max-width: 700px;
+      margin: 0 auto 30px auto;
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .playlist {
+      max-width: 700px;
+      margin: 20px auto;
+    }
+
+    iframe {
+      width: 100%;
+      height: 80px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎒 Explore Indian States with Music</h1>
+
+  <div class="dropdown">
+    <select id="stateSelect" onchange="onStateChange()">
+      <option value="">-- Select a State --</option>
+      <option value="Telangana">Telangana</option>
+      <option value="Goa">Goa</option>
+      <option value="Punjab">Punjab</option>
+      <option value="Kerala">Kerala</option>
+      <option value="Rajasthan">Rajasthan</option>
+    </select>
+  </div>
+
+  <div id="infoBox" class="info-box"></div>
+  <div id="playlistResults" class="playlist"></div>
+
+  <script>
+    const token = 'BQDYsN1w1ivwluJzHz6oqy2H0xfNNr4dGaxn7SaF0LWj12FoquLXgH68TbJvdJeVGNUDrHQM82mSLdd9GcYuKtBydcFhPfcjeYxPjDYKmcCpC9h7iidFw-53iFz-z4woYRZlla4bsFc';
+
+    const stateInfoMap = {
+      Telangana: "Explore Hyderabad, Charminar, Golconda Fort, and Telangana's rich food and folk culture.",
+      Goa: "Sun, sand, and shacks! Explore beaches, nightlife, and Portuguese heritage in Goa.",
+      Punjab: "Home of the Golden Temple, Bhangra beats, and delicious North Indian cuisine.",
+      Kerala: "Experience houseboats in backwaters, Kathakali dance, and lush green landscapes.",
+      Rajasthan: "Deserts, palaces, camels and colors — Rajasthan is a royal escape!"
+    };
+
+    const stateMusicMap = {
+      Telangana: "Telangana Folk",
+      Goa: "Goa Party",
+      Punjab: "Bhangra Hits",
+      Kerala: "Kerala Backwaters Music",
+      Rajasthan: "Rajasthani Folk"
+    };
+
+    async function onStateChange() {
+      const state = document.getElementById("stateSelect").value;
+      const infoBox = document.getElementById("infoBox");
+      const playlistContainer = document.getElementById("playlistResults");
+
+      if (!state) {
+        infoBox.innerHTML = "";
+        playlistContainer.innerHTML = "";
+        return;
+      }
+
+      // Show state info
+      infoBox.innerHTML = `<h2>${state}</h2><p>${stateInfoMap[state]}</p>`;
+
+      // Fetch music
+      const searchQuery = stateMusicMap[state];
+      playlistContainer.innerHTML = "<p>Loading music recommendations...</p>";
+
+      const response = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery)}&type=playlist&limit=3`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await response.json();
+      if (!data.playlists?.items?.length) {
+        playlistContainer.innerHTML = "<p>No playlists found for this region.</p>";
+        return;
+      }
+
+      // Display embedded players
+      playlistContainer.innerHTML = "";
+      data.playlists.items.forEach(playlist => {
+        const iframe = document.createElement("iframe");
+        iframe.src = `https://open.spotify.com/embed/playlist/${playlist.id}`;
+        iframe.setAttribute("allow", "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture");
+        playlistContainer.appendChild(iframe);
+      });
+    }
+  </script>
+
+</body>
+</html>

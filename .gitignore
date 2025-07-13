@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Environment variables
+.env
+.env.*
+
+# Flask cache
+instance/
+.webassets-cache/
+
+# VSCode and PyCharm
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Logs
+*.log
+
+# Compiled files
+*.so
+
+# Pip dependency files
+pip-log.txt
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+coverage.xml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.cache/
+
+# Mongo dump files (optional)
+dump/
+*.bson
+*.json
+
+# Database files (if any)
+*.sqlite3
+*.db
