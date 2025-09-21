@@ -329,10 +329,41 @@
             }
             
             .input-form {
-                display: flex;
-                gap: 15px;
-                align-items: center;
-            }
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.input-btn {
+    background: var(--light);
+    color: var(--dark);
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.input-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.input-btn.recording {
+    background: #e74c3c;
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
             
             .input-field {
                 flex: 1;
@@ -880,20 +911,27 @@
                         </div>
     
                         <div class="input-container">
-                            <form class="input-form" id="messageForm">
-                                <input 
-                                    type="text" 
-                                    id="messageInput" 
-                                    class="input-field" 
-                                    placeholder="Ask me about any destination in India..."
-                                    maxlength="300"
-                                    autocomplete="off"
-                                >
-                                <button type="submit" class="send-btn" id="sendBtn">
-                                    <i class="fas fa-paper-plane"></i>
-                                </button>
-                            </form>
-                        </div>
+    <form class="input-form" id="messageForm">
+        <input 
+            type="text" 
+            id="messageInput" 
+            class="input-field" 
+            placeholder="Ask me about any destination in India..."
+            maxlength="300"
+            autocomplete="off"
+        >
+        <button type="button" class="input-btn" id="voiceBtn" title="Voice input">
+            <i class="fas fa-microphone"></i>
+        </button>
+        <button type="button" class="input-btn" id="imageBtn" title="Upload image">
+            <i class="fas fa-image"></i>
+        </button>
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        <button type="submit" class="send-btn" id="sendBtn">
+            <i class="fas fa-paper-plane"></i>
+        </button>
+    </form>
+</div>
                     </div>
                 </div>
             </div>
@@ -1384,49 +1422,80 @@
             const messageInput = document.getElementById('messageInput');
             const sendBtn = document.getElementById('sendBtn');
     
-            messageForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const message = messageInput.value.trim();
-                if (!message) return;
-    
-                sendMessage(message);
-            });
+
     
             function sendQuickMessage(message) {
                 messageInput.value = message;
                 sendMessage(message);
             }
     
-            async function sendMessage(message) {
-                addUserMessage(message);
-                messageInput.value = '';
-                setLoading(true);
+            // Modified sendMessage function to include image context
+async function sendMessage(message) {
+  if (!message && !currentImageContext) return;
+  
+  // If there's text input, show it
+  if (message) {
+    addUserMessage(message);
+  }
+  
+  setLoading(true);
+  
+  try {
+    let requestData;
     
-                try {
-                    const response = await fetch('/api/message', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ message: message })
-                    });
-    
-                    const data = await response.json();
-    
-                    if (response.ok) {
-                        addBotMessage(data);
-                    } else {
-                        addErrorMessage(data.error || 'Something went wrong. Please try again.');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    addErrorMessage('Connection error. Please check your internet and try again.');
-                } finally {
-                    setLoading(false);
-                    messageInput.focus();
-                }
-            }
-    
+    // If we have an image context, send it with the message
+    if (currentImageContext) {
+      const formData = new FormData();
+      formData.append('image', currentImageContext.file);
+      formData.append('message', message || 'Tell me more about this image');
+      
+      if (window.chatContext) {
+        formData.append('context', JSON.stringify(window.chatContext));
+      }
+      
+      const response = await fetch('/api/multi-modal-message', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        addBotMessage(data);
+      } else {
+        addErrorMessage(data.error || 'Something went wrong. Please try again.');
+      }
+    } else {
+      // Regular text-only message
+      requestData = { message: message };
+      if (window.chatContext) {
+        requestData.context = window.chatContext;
+      }
+      
+      const response = await fetch('/api/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        addBotMessage(data);
+      } else {
+        addErrorMessage(data.error || 'Something went wrong. Please try again.');
+      }
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    addErrorMessage('Connection error. Please check your internet and try again.');
+  } finally {
+    setLoading(false);
+    if (messageInput) messageInput.focus();
+  }
+}
             function addUserMessage(message) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'message user-message';
@@ -1665,6 +1734,350 @@
             messageInput.focus();
         }
     }
+// Add these functions after your existing script section, before the closing </body> tag
+
+// Voice input functionality
+function setupVoiceInput() {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  
+  const voiceButton = document.getElementById('voiceBtn');
+  
+  recognition.onresult = function(event) {
+    const speechResult = event.results[0][0].transcript;
+    document.getElementById('messageInput').value = speechResult;
+    voiceButton.classList.remove('recording');
+    voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
+  };
+  
+  recognition.onerror = function(event) {
+    console.error('Speech recognition error', event.error);
+    voiceButton.classList.remove('recording');
+    voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
+  };
+  
+  voiceButton.addEventListener('click', function() {
+    if (voiceButton.classList.contains('recording')) {
+      recognition.stop();
+      voiceButton.classList.remove('recording');
+      voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
+    } else {
+      recognition.start();
+      voiceButton.classList.add('recording');
+      voiceButton.innerHTML = '<i class="fas fa-stop"></i>';
+    }
+  });
+}
+
+// Image upload functionality
+function setupImageUpload() {
+  const imageInput = document.getElementById('imageInput');
+  const imageButton = document.getElementById('imageBtn');
+  
+  console.log('Image input elements:', imageInput, imageButton); // Debug line
+  
+  imageButton.addEventListener('click', function() {
+    console.log('Image button clicked'); // Debug line
+    imageInput.click();
+  });
+  
+  imageInput.addEventListener('change', function() {
+    console.log('File input changed, files:', this.files); // Debug line
+    
+    if (this.files && this.files[0]) {
+      const file = this.files[0];
+      console.log('File selected:', file.name, file.type); // Debug line
+      
+      // Check if it's actually an image
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        console.log('FileReader loaded, result length:', e.target.result.length); // Debug line
+        
+        // Create the image element directly
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'message user-message';
+        imageContainer.innerHTML = `
+          <div class="message-content">
+            <div style="margin: 10px 0;">
+              <img src="${e.target.result}" alt="Uploaded image" style="max-width: 300px; max-height: 200px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: block;">
+              <p style="font-size: 0.9rem; color: #7f8c8d; margin-top: 5px;">📷 ${file.name}</p>
+            </div>
+          </div>
+        `;
+        
+        // Add to chat
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.appendChild(imageContainer);
+        scrollToBottom();
+        
+        console.log('Image preview added to chat'); // Debug line
+        
+        // Now send to API
+        setLoading(true);
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('message', 'What can you tell me about this image?');
+        
+        if (window.chatContext) {
+          formData.append('context', JSON.stringify(window.chatContext));
+        }
+        
+        fetch('/api/multi-modal-message', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('API response:', data); // Debug line
+          if (data.response || data.success !== false) {
+            addBotMessage(data);
+          } else {
+            addErrorMessage(data.error || 'Failed to process image');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          addErrorMessage('Failed to upload image. Please try again.');
+        })
+        .finally(() => {
+          setLoading(false);
+          imageInput.value = '';
+        });
+      };
+      
+      reader.onerror = function() {
+        console.error('FileReader error'); // Debug line
+        addErrorMessage('Failed to read the image file');
+      };
+      
+      reader.readAsDataURL(file);
+    }
+  });
+}
+// Global variable to store the current image for ongoing chat
+let currentImageContext = null;
+
+function setupImageUpload() {
+  const imageInput = document.getElementById('imageInput');
+  const imageButton = document.getElementById('imageBtn');
+  
+  imageButton.addEventListener('click', function() {
+    imageInput.click();
+  });
+  
+  imageInput.addEventListener('change', function() {
+    if (this.files && this.files[0]) {
+      const file = this.files[0];
+      
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        // Store image data for ongoing conversation
+        currentImageContext = {
+          imageData: e.target.result,
+          fileName: file.name,
+          file: file
+        };
+        
+        // Show image preview in chat
+        showImagePreview(e.target.result, file.name);
+        
+        // Send initial analysis request
+        analyzeImage(file, "What can you tell me about this image?");
+      };
+      
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+function showImagePreview(imageData, fileName) {
+  const chatMessages = document.getElementById('chatMessages');
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message user-message';
+  
+  messageDiv.innerHTML = `
+    <div class="message-content">
+      <div style="text-align: center; margin: 10px 0;">
+        <img src="${imageData}" alt="Uploaded image" style="max-width: 300px; max-height: 200px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: block; margin: 0 auto;">
+        <p style="font-size: 0.9rem; color: #7f8c8d; margin-top: 8px;">📷 ${fileName}</p>
+        <p style="font-size: 0.8rem; color: #95a5a6;">Image uploaded - ready to chat about it!</p>
+      </div>
+    </div>
+  `;
+  
+  chatMessages.appendChild(messageDiv);
+  scrollToBottom();
+}
+
+function analyzeImage(file, message) {
+  setLoading(true);
+  
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('message', message);
+  
+  if (window.chatContext) {
+    formData.append('context', JSON.stringify(window.chatContext));
+  }
+  
+  fetch('/api/multi-modal-message', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.response || data.success !== false) {
+      addBotMessage(data);
+    } else {
+      addErrorMessage(data.error || 'Failed to process image');
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    addErrorMessage('Failed to analyze image. Please try again.');
+  })
+  .finally(() => {
+    setLoading(false);
+  });
+}
+
+// Modified sendMessage function to include image context
+async function sendMessage(message) {
+  if (!message && !currentImageContext) return;
+  
+  // If there's text input, show it
+  if (message) {
+    addUserMessage(message);
+  }
+  
+  setLoading(true);
+  
+  try {
+    let requestData;
+    
+    // If we have an image context, send it with the message
+    if (currentImageContext) {
+      const formData = new FormData();
+      formData.append('image', currentImageContext.file);
+      formData.append('message', message || 'Tell me more about this image');
+      
+      if (window.chatContext) {
+        formData.append('context', JSON.stringify(window.chatContext));
+      }
+      
+      const response = await fetch('/api/multi-modal-message', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        addBotMessage(data);
+      } else {
+        addErrorMessage(data.error || 'Something went wrong. Please try again.');
+      }
+    } else {
+      // Regular text-only message
+      requestData = { message: message };
+      if (window.chatContext) {
+        requestData.context = window.chatContext;
+      }
+      
+      const response = await fetch('/api/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        addBotMessage(data);
+      } else {
+        addErrorMessage(data.error || 'Something went wrong. Please try again.');
+      }
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    addErrorMessage('Connection error. Please check your internet and try again.');
+  } finally {
+    setLoading(false);
+    messageInput.focus();
+  }
+}
+
+// Add button to clear image context
+function addClearImageButton() {
+  if (currentImageContext) {
+    const chatMessages = document.getElementById('chatMessages');
+    const clearDiv = document.createElement('div');
+    clearDiv.className = 'message';
+    clearDiv.style.textAlign = 'center';
+    clearDiv.innerHTML = `
+      <button onclick="clearImageContext()" style="
+        background: #e74c3c; 
+        color: white; 
+        border: none; 
+        padding: 8px 16px; 
+        border-radius: 20px; 
+        cursor: pointer; 
+        font-size: 0.9rem;
+        margin: 10px 0;
+      ">
+        Clear Image & Chat Normally
+      </button>
+    `;
+    chatMessages.appendChild(clearDiv);
+    scrollToBottom();
+  }
+}
+
+function clearImageContext() {
+  currentImageContext = null;
+  addBotMessage({
+    response: "Image context cleared. You can now chat normally or upload a new image.",
+    suggestions: ["Upload a new image", "Plan a trip", "Ask about destinations"]
+  });
+}
+
+// Update the message form handler
+// Single message form handler - prevent duplicates
+document.getElementById('messageForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const message = messageInput.value.trim();
+    
+    // Check if we have either text or image context
+    if (!message && !currentImageContext) return;
+    
+    await sendMessage(message);
+    messageInput.value = '';
+});
+// Initialize voice and image input after page load
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+    setupVoiceInput();
+  } else {
+    document.getElementById('voiceBtn').style.display = 'none';
+    console.warn('Speech recognition not supported in this browser');
+  }
+  
+  setupImageUpload();
+});
     </script>
     </body>
     </html>
