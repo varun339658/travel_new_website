@@ -1,6 +1,6 @@
 """
 India Travel Explorer with AI Assistant and Monument Recognition Integration
-A combined application that integrates India Travel Explorer, AI Travel Assistant, and Monument Recognition
+A combined application that integrates India Travel Explorer, AI Travel Assistant (powered by Gemini), and Monument Recognition
 """
 
 import os
@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
-from groq import Groq
+import google.generativeai as genai # Using Google Gemini
 
 # Configure logging
 log_dir = 'logs'
@@ -49,14 +49,9 @@ logger.addHandler(file_handler)
 
 # Load environment variables
 load_dotenv()
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Access environment variables
-groq_api_key = os.getenv("GROQ_API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY") # Using Google API Key for Gemini
 unsplash_key = os.getenv("UNSPLASH_ACCESS_KEY")
 openweather_api_key = os.getenv("OPENWEATHER_API_KEY")
 spotify_api_key = os.getenv("SPOTIFY_API_KEY")
@@ -70,7 +65,6 @@ WORKSPACE = os.getenv("ROBOFLOW_WORKSPACE")
 VERSION = os.getenv("ROBOFLOW_VERSION")
 
 # Set the Flask secret key
-from flask import Flask
 app = Flask(__name__)
 app.secret_key = secret_key
 
@@ -107,9 +101,18 @@ DATABASE_NAME = "india_travel"
 STATES_COLLECTION = "states"
 TOURIST_PLACES_COLLECTION = "tourist_places"
 
-# Initialize Groq client
-groq_client = Groq(api_key=groq_api_key)
-MODEL_NAME = "llama3-8b-8192"
+# --- Gemini AI Client Initialization ---
+gemini_model = None
+MODEL_NAME = "gemini-1.5-flash" 
+try:
+    if not google_api_key:
+        raise ValueError("GOOGLE_API_KEY environment variable not set.")
+    genai.configure(api_key=google_api_key)
+    gemini_model = genai.GenerativeModel(MODEL_NAME)
+    logger.info(f"Gemini client configured successfully with model: {MODEL_NAME}")
+except Exception as e:
+    logger.critical(f"Failed to configure Gemini client: {e}")
+# --- End Gemini Initialization ---
 
 # Caching and rate limiting
 response_cache = {}
@@ -125,9 +128,6 @@ client = None
 db = None
 states_collection = None
 tourist_places_collection = None
-
-# Define state coordinates for fallback
-
 
 # Define state coordinates for fallback
 stateCoordinates = {
@@ -737,7 +737,7 @@ def get_tourist_place():
             "message": "An error occurred while retrieving tourist place information."
         }), 500
 
-# ============ AI Travel Assistant API Routes ============
+# ============ AI Travel Assistant API Routes (Powered by Gemini) ============
 
 @app.route("/api/message", methods=["POST"])
 def handle_message():
@@ -783,7 +783,7 @@ def handle_message():
 
 @app.route("/api/plan-trip", methods=["POST"])
 def plan_trip():
-    """AI Trip Planner endpoint - Uses Groq API dynamically"""
+    """AI Trip Planner endpoint - Uses Gemini API dynamically"""
     try:
         user_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
         
@@ -840,7 +840,7 @@ def plan_trip():
         }), 500
 
 def process_travel_query(user_input, context=None):
-    """Process general travel queries using AI with optional context"""
+    """Process general travel queries using Gemini with optional context"""
     if context is None:
         context = {}
     
@@ -857,7 +857,7 @@ def process_travel_query(user_input, context=None):
         context_info = f"User is exploring the {context['region']} region of India. "
     
     travel_prompt = f"""
-You are India Travel Assistant - a friendly expert helping tourists explore India.
+You are India Travel Assistant - a friendly expert helping tourists explore India. You are concise, practical, and enthusiastic.
 
 User query: "{user_input}"
 {context_info}
@@ -880,19 +880,21 @@ If not about India travel, respond: "I specialize in India travel! Ask me about 
 """
 
     try:
-        response = groq_client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": "You are a helpful India travel expert. Be concise, practical, and enthusiastic."},
-                {"role": "user", "content": travel_prompt}
-            ],
+        if not gemini_model:
+            raise Exception("Gemini client not initialized.")
+            
+        generation_config = genai.types.GenerationConfig(
             temperature=0.6,
-            max_tokens=512,
-            timeout=10
+            max_output_tokens=512
         )
-        text_reply = response.choices[0].message.content.strip()
+        response = gemini_model.generate_content(
+            travel_prompt, 
+            generation_config=generation_config,
+            request_options={'timeout': 15}
+        )
+        text_reply = response.text.strip()
     except Exception as e:
-        logger.error(f"Groq API error: {str(e)}")
+        logger.error(f"Gemini API error: {str(e)}")
         text_reply = f"I'd love to help you explore {location}! This destination offers amazing experiences. Please try again or use our trip planner for detailed itineraries."
 
     # Fetch additional data
@@ -909,7 +911,7 @@ If not about India travel, respond: "I specialize in India travel! Ask me about 
     }
 
 def generate_ai_trip_plan(destination, duration, budget_type, interests, travel_style, group_size):
-    """Generate trip plan using Groq AI - No predefined data"""
+    """Generate trip plan using Gemini AI - No predefined data"""
     
     # Create comprehensive prompt for AI
     interest_text = f"with focus on {', '.join(interests)}" if interests else ""
@@ -971,25 +973,21 @@ Focus on authentic experiences that match the {travel_style} style and {budget_t
 """
 
     try:
+        if not gemini_model:
+            raise Exception("Gemini client not initialized.")
+            
         # Get comprehensive AI response
-        response = groq_client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are the best travel planner for India with extensive knowledge of destinations, attractions, costs, and practical travel advice. Create detailed, realistic, and unique itineraries."
-                },
-                {
-                    "role": "user", 
-                    "content": trip_prompt
-                }
-            ],
-            temperature=0.7,  # Higher creativity for unique content
-            max_tokens=4000,  # Allow for comprehensive response
-            timeout=30
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.7,
+            max_output_tokens=4000
+        )
+        response = gemini_model.generate_content(
+            trip_prompt, 
+            generation_config=generation_config,
+            request_options={'timeout': 60} # Longer timeout for complex generation
         )
         
-        ai_response = response.choices[0].message.content.strip()
+        ai_response = response.text.strip()
         logger.info(f"AI generated response length: {len(ai_response)}")
         
         # Parse and structure the AI response
@@ -1005,7 +1003,7 @@ Focus on authentic experiences that match the {travel_style} style and {budget_t
         return structured_plan
         
     except Exception as e:
-        logger.error(f"Error generating AI trip plan: {str(e)}")
+        logger.error(f"Error generating AI trip plan with Gemini: {str(e)}")
         return generate_fallback_plan(destination, duration, budget_type, group_size)
 
 def parse_ai_response_to_structure(destination, duration, budget_type, group_size, ai_response):
@@ -1506,24 +1504,24 @@ def get_related_suggestions(location):
 
 # Cache cleanup
 def cleanup_cache():
-   with cache_lock:
-       current_time = time.time()
-       expired = [k for k, v in response_cache.items() if v["expires"] <= current_time]
-       for k in expired:
-           del response_cache[k]
-   
-   threading.Timer(900, cleanup_cache).start()
+    with cache_lock:
+        current_time = time.time()
+        expired = [k for k, v in response_cache.items() if v["expires"] <= current_time]
+        for k in expired:
+            del response_cache[k]
+    
+    threading.Timer(900, cleanup_cache).start()
 
 if __name__ == "__main__":
-   port = int(os.environ.get("PORT", 5000))
-   debug_mode = os.environ.get("FLASK_ENV") == "development"
-   
-   logger.info(f"Starting India Travel Explorer with AI Assistant on port {port}")
-   cleanup_cache()
-   
-   app.run(
-       host="0.0.0.0",
-       port=port,
-       debug=debug_mode,
-       threaded=True
-   )
+    port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.environ.get("FLASK_ENV") == "development"
+    
+    logger.info(f"Starting India Travel Explorer with AI Assistant on port {port}")
+    cleanup_cache()
+    
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=debug_mode,
+        threaded=True
+    )
