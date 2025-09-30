@@ -104,8 +104,9 @@ TOURIST_PLACES_COLLECTION = "tourist_places"
 # Gemini AI Client Initialization
 gemini_model = None
 gemini_vision_model = None
-MODEL_NAME = "gemini-1.5-flash"
-VISION_MODEL_NAME = "gemini-1.5-flash"
+
+MODEL_NAME = "gemini-2.0-flash"
+VISION_MODEL_NAME = "gemini-2.0-flash"
 
 try:
     if not google_api_key:
