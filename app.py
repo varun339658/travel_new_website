@@ -101,12 +101,13 @@ DATABASE_NAME = "india_travel"
 STATES_COLLECTION = "states"
 TOURIST_PLACES_COLLECTION = "tourist_places"
 
-# Gemini AI Client Initialization
 gemini_model = None
 gemini_vision_model = None
 
-MODEL_NAME = "gemini-2.0-flash"
-VISION_MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "models/gemini-2.5-flash"
+VISION_MODEL_NAME = "models/gemini-2.5-flash"
+
+
 
 try:
     if not google_api_key:
@@ -256,14 +257,12 @@ def process_image_with_vision(image_path, user_query=""):
         
         response = gemini_vision_model.generate_content([vision_prompt, image])
         
-        # DON'T DELETE THE FILE HERE - let it be cleaned up later
-        # os.remove(filepath)  <-- REMOVE THIS LINE
-        
         return response.text.strip()
         
     except Exception as e:
         logger.error(f"Vision processing error: {str(e)}")
         return "Sorry, I couldn't analyze the image. Please try uploading a clear image of an Indian travel destination."
+
 # Enhanced RAG Functions
 def fetch_enhanced_rag_context(destination, query_type="general", interests=None, duration=None):
     """Enhanced RAG context fetcher with multiple sources and fallbacks"""
@@ -365,7 +364,7 @@ def assess_combined_rag_quality(combined_context):
     ]
     
     keyword_count = sum(1 for keyword in travel_keywords 
-                       if keyword in combined_context.lower())
+                        if keyword in combined_context.lower())
     
     if keyword_count >= 8:
         return "excellent"
@@ -991,7 +990,6 @@ def handle_multi_modal_message():
                     input_types.append("image")
                     logger.info(f"Image processed successfully: {filename}")
                     
-                    # DELAY FILE CLEANUP - keep file for potential follow-up questions
                     # Schedule cleanup after 10 minutes instead of immediate deletion
                     def cleanup_file():
                         try:
@@ -1001,8 +999,6 @@ def handle_multi_modal_message():
                         except:
                             pass
                     
-                    # Schedule cleanup in 10 minutes
-                    import threading
                     cleanup_timer = threading.Timer(600.0, cleanup_file)  # 10 minutes
                     cleanup_timer.start()
                     
@@ -1059,94 +1055,6 @@ def handle_multi_modal_message():
             "error": "Sorry, I encountered an issue processing your request.",
             "suggestion": "Please try again with a clear text message, image, or voice input."
         }), 500
-
-def process_enhanced_travel_query(user_input, context=None, input_types=None):
-    """Enhanced RAG-powered travel query processor with multi-modal support"""
-    if context is None:
-        context = {}
-    if input_types is None:
-        input_types = ["text"]
-
-    location = context.get("state") or context.get("place") or extract_smart_location(user_input)
-    
-    # Enhanced RAG with multiple sources
-    rag_data = fetch_enhanced_rag_context(
-        destination=location,
-        query_type="specific",
-        interests=context.get("interests", [])
-    )
-    
-    rag_context = rag_data["combined_context"]
-    context_quality = rag_data["context_quality"]
-    
-    # Multi-modal aware prompt
-    input_type_str = ", ".join(input_types)
-    travel_prompt = f"""
-    You are India Travel Assistant - an expert on Indian destinations with multi-modal capabilities.
-    You can understand text, images, and voice inputs to provide comprehensive travel assistance.
-
-    Input Types Used: {input_type_str}
-    User Input: "{user_input}"
-    Location: {location}
-    Context Quality: {context_quality}
-    
-    REAL-TIME KNOWLEDGE (Primary source):
-    {rag_context}
-    
-    Instructions:
-    1. Use the real-time knowledge extensively for accurate information
-    2. If processing image input, acknowledge what you saw and provide specific details
-    3. If processing voice input, confirm understanding and respond conversationally
-    4. Include specific details from context (places, costs, timing)
-    5. Be enthusiastic but factual
-    
-    Format response (under 300 words) with these sections:
-    🏛️ OVERVIEW (2-3 sentences about {location})
-    📅 BEST TIME (specific months with reasons)
-    🎯 TOP ATTRACTIONS (3-4 must-visit places)
-    🍽️ FOOD HIGHLIGHTS (2-3 local specialties)
-    🌟 INSIDER TIP (unique insight from real-time data)
-    
-    Ground every claim in the provided real-time knowledge.
-    """
-
-    try:
-        if not gemini_model:
-            raise Exception("Gemini client not initialized.")
-
-        response = gemini_model.generate_content(
-            travel_prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=1000,
-                top_p=0.9,
-                top_k=40
-            ),
-            request_options={"timeout": 30}
-        )
-        
-        text_reply = response.text.strip() if response.text else None
-        
-        if not text_reply or len(text_reply) < 80:
-            raise Exception("Generated response insufficient")
-            
-    except Exception as e:
-        logger.error(f"Enhanced Gemini error for {location}: {str(e)}")
-        text_reply = generate_enhanced_fallback_response(location, user_input, rag_context, context_quality)
-
-    return {
-        "response": text_reply,
-        "location": location,
-        "weather": fetch_weather_quick(location),
-        "image_url": fetch_image_quick(location),
-        "timestamp": int(time.time()),
-        "suggestions": generate_smart_suggestions(location, user_input),
-        "rag_source": "enhanced_multi_source",
-        "rag_quality": context_quality,
-        "confidence_score": calculate_enhanced_confidence(text_reply, rag_context),
-        "sources_used": rag_data["sources_used"],
-        "multi_modal": True
-    }
 
 def generate_enhanced_fallback_response(location, user_input, rag_context, quality):
     """Generate enhanced fallback response"""
@@ -1228,7 +1136,7 @@ def calculate_enhanced_confidence(response, rag_context):
     
     required_sections = ['overview', 'best time', 'attractions', 'food', 'tip']
     sections_found = sum(1 for section in required_sections 
-                        if section.replace(' ', '').lower() in response.lower().replace(' ', ''))
+                         if section.replace(' ', '').lower() in response.lower().replace(' ', ''))
     confidence += (sections_found / len(required_sections)) * 0.2
     
     return min(confidence, 1.0)
@@ -1250,12 +1158,11 @@ def handle_message():
 
         user_input = data.get("message", "").strip()
         context = data.get("context", {})
-        use_news = data.get("news", False)
 
         if not user_input or len(user_input) > 500:
             return jsonify({"error": "Please enter a valid message (max 500 characters)"}), 400
 
-        cache_key = f"msg_{hash(user_input.lower())}_{hash(str(context))}_{use_news}"
+        cache_key = f"msg_{hash(user_input.lower())}_{hash(str(context))}"
         cached_response = get_from_cache(cache_key)
         if cached_response:
             return jsonify(cached_response)
@@ -1298,7 +1205,6 @@ def plan_trip():
         interests = data.get("interests", [])
         travel_style = data.get("travel_style", "balanced")
         group_size = int(data.get("group_size", 2))
-        use_news = data.get("use_news", False)
         
         # Validation
         if not destination:
@@ -1324,8 +1230,7 @@ def plan_trip():
             budget_type=budget_type,
             interests=interests,
             travel_style=travel_style,
-            group_size=group_size,
-            use_news=use_news
+            group_size=group_size
         )
         
         # Cache the plan for 3 hours
@@ -1341,7 +1246,7 @@ def plan_trip():
             "suggestion": "Try with a destination like 'Rajasthan' or 'Kerala'"
         }), 500
 
-def generate_enhanced_ai_trip_plan(destination, duration, budget_type, interests, travel_style, group_size, use_news=False):
+def generate_enhanced_ai_trip_plan(destination, duration, budget_type, interests, travel_style, group_size):
     """Fully AI and RAG-powered trip planner without hardcoded content"""
     
     logger.info(f"Generating fully dynamic trip plan: {destination}, {duration}d, {budget_type}")
@@ -1453,7 +1358,7 @@ def generate_enhanced_ai_trip_plan(destination, duration, budget_type, interests
         response = gemini_model.generate_content(
             trip_prompt,
             generation_config=genai.types.GenerationConfig(
-                temperature=0.7,
+                temperature=0.5,
                 max_output_tokens=6000,
                 top_p=0.9,
                 top_k=40
@@ -1593,7 +1498,7 @@ def assess_comprehensive_rag_quality(combined_context):
     ]
     
     indicator_count = sum(1 for indicator in quality_indicators 
-                         if indicator in combined_context.lower())
+                          if indicator in combined_context.lower())
     
     if indicator_count >= 15:
         return "excellent"
@@ -2358,7 +2263,10 @@ def process_enhanced_travel_query(user_input, context=None, input_types=None):
     {rag_context}
     
     Instructions:
-    1. Answer using ONLY the real-time data provided above
+    1. Answer primarily using the real-time data provided below.
+    If some information is missing or unclear, use well-known general travel knowledge
+    and clearly phrase it as an estimate or general advice.
+
     2. If image input: acknowledge what you saw and provide specific details
     3. If voice input: confirm understanding conversationally
     4. Extract specific places, costs, timings from the data
@@ -2390,7 +2298,7 @@ def process_enhanced_travel_query(user_input, context=None, input_types=None):
         
         text_reply = response.text.strip() if response.text else None
         
-        if not text_reply or len(text_reply) < 100:
+        if not text_reply or len(text_reply) < 250:
             text_reply = generate_rag_fallback_response(location, rag_context, context_quality)
             
     except Exception as e:
